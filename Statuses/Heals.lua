@@ -228,12 +228,12 @@ function PlexusStatusHeals:UpdateUnit(event, unit)
             end
         else
             self:SendIncomingHealsStatus(guid, incoming, incoming, maxHealth)
-            if timer and timer[guid] and not timer[guid]:IsCancelled() then
-                timer[guid]:Cancel()
-            end
-            timer[guid] = C_Timer.After(1.5, function()
-                self.core:SendStatusLost(guid, "alert_heals")
-            end)
+            --if timer and timer[guid] and not timer[guid]:IsCancelled() then
+            --    timer[guid]:Cancel()
+            --end
+            --timer[guid] = C_Timer.After(1.5, function()
+            --    self.core:SendStatusLost(guid, "alert_heals")
+            --end)
         end
     end
 end
@@ -246,6 +246,8 @@ function PlexusStatusHeals:SendIncomingHealsStatus(guid, incoming, estimatedHeal
         elseif incoming > 999 then
             incomingText = format("%.1fk", incoming / 1000)
         end
+    else
+        incomingText = AbbreviateNumbers(incomingText)
     end
     self.core:SendStatusGained(guid, "alert_heals",
         settings.priority,
