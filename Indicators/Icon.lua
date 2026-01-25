@@ -192,7 +192,7 @@ local function Reset(self)
 
 end
 
-local function SetStatus(self, color, text, value, _, texture, texCoords, stack, start, duration)
+local function SetStatus(self, color, text, value, _, texture, texCoords, stack, start, duration, expirationTime)
 	local profile = PlexusFrame.db.profile
 	if not texture then return end
 
@@ -208,7 +208,7 @@ local function SetStatus(self, color, text, value, _, texture, texCoords, stack,
         else
             self.texture:SetAlpha(1)
         end
-        if (not texture == "Interface\\TargetingFrame\\UI-RaidTargetingIcons") and texCoords then
+        if (texture ~= "Interface\\TargetingFrame\\UI-RaidTargetingIcons") and texCoords then
 		    self.texture:SetTexCoord(texCoords.left, texCoords.right, texCoords.top, texCoords.bottom)
         end
 	end
@@ -224,23 +224,36 @@ local function SetStatus(self, color, text, value, _, texture, texCoords, stack,
 	end
 
 	if profile.enableIconCooldown and type(duration) == "number" and duration > 0 and type(start) == "number" and start > 0 then --luacheck: ignore 631
-		self.cooldown:SetCooldown(start, duration)
+        self.cooldown:SetCooldown(start, duration)
+		self.cooldown:Show()
+    elseif profile.enableIconCooldown and self.cooldown.SetCooldownFromDurationObject and duration and type(duration == "userdata") then
+		self.cooldown:SetCooldownFromDurationObject(duration)
 		self.cooldown:Show()
 	else
 		self.cooldown:Hide()
 	end
 
-	if profile.enableIconStackText and stack and stack ~= 0 then
-		self.text:SetText(stack)
-	else
-		self.text:SetText("")
+    if Plexus:issecretvalue(stack) then
+        self.text:SetText(C_StringUtil.TruncateWhenZero(stack))
+    else
+	    if profile.enableIconStackText and stack and stack ~= 0 then
+	        self.text:SetText(stack)
+	    else
+	        self.text:SetText("")
+        end
     end
 
     local CountDownNumber = tonumber(text)
-    if profile.showIconCountDownText and type(CountDownNumber) == "number" and CountDownNumber ~= 0 then
-        self.cooldowntext:SetText(text)
-	else
-		self.cooldowntext:SetText("")
+    if Plexus:issecretvalue(CountDownNumber) then
+        if profile.showIconCountDownText and type(CountDownNumber) == "number" then
+            self.text:SetText(C_StringUtil.TruncateWhenZero(CountDownNumber))
+        end
+    else
+        if profile.showIconCountDownText and type(CountDownNumber) == "number" and CountDownNumber ~= 0 then
+            self.cooldowntext:SetText(text)
+	    else
+	        self.cooldowntext:SetText("")
+        end
     end
 
 	self:Show()

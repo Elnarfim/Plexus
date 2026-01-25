@@ -4,7 +4,7 @@ end
 
 local UnitAura, UnitGUID, pairs = _G.UnitAura, _G.UnitGUID, _G.pairs
 
-local MAX_BUFFS = 6
+local MAX_BUFFS = 40
 
 local L = setmetatable(PlexusDeDeBuffIconsLocale or {}, {__index = function(t, k) t[k] = k return k end})
 
@@ -88,7 +88,7 @@ local options = {
             type = "range",
             name = L["Icons Size"],
             desc = L["Size for each buff icon"],
-            max = 16,
+            max = 50,
             min = 5,
             step = 1,
             get = function () return PlexusDeDeBuffIcons.db.profile.iconsize end,
@@ -233,6 +233,7 @@ function PlexusDeDeBuffIcons.InitializeFrame(_, f) --luacheck: ignore 212
             bg.stack:ClearAllPoints()
             bg.stack:SetPoint("BOTTOMRIGHT", bg.icon, 1, -1)
             f.DeBuffIcons[i] = bg
+            f.DeBuffIcons[i]:Hide()
         end
 
         PlexusDeDeBuffIcons.ResetDeBuffIconsize(f)
@@ -326,20 +327,32 @@ function PlexusDeDeBuffIcons:OnInitialize()
 end
 
 function PlexusDeDeBuffIcons:OnEnable()
-    if not PlexusDeDeBuffIcons.db.profile.enabled then return end
-    self.enabled = true
-    self:RegisterEvent("UNIT_AURA")
-    if(not self.bucket) then
-        self:Debug("registering bucket")
-        self.bucket = self:RegisterBucketMessage("Plexus_UpdateLayoutSize", 1, "UpdateAllUnitsBuffs")
+    if not PlexusDeDeBuffIcons.db.profile.enabled then
+        for _,v in pairs(PlexusFrame.registeredFrames) do
+            for i=1, MAX_BUFFS do --luacheck: ignore
+                v.DeBuffIcons[i]:Hide()
+            end
+        end
+        self.enabled = nil
+        return
+    else
+        self.enabled = true
+        self:RegisterEvent("UNIT_AURA")
+        self:RegisterEvent("LOADING_SCREEN_DISABLED")
+        self:RegisterMessage("Plexus_ExtraUnitsChanged", "ExtraUnitsChanged")
+        if(not self.bucket) then
+            self:Debug("registering bucket")
+            self.bucket = self:RegisterBucketMessage("Plexus_UpdateLayoutSize", 1, "UpdateAllUnitsBuffs")
+        end
+        self:UpdateAllUnitsBuffs()
     end
-
-    self:UpdateAllUnitsBuffs()
 end
 
 function PlexusDeDeBuffIcons:OnDisable()
     self.enabled = nil
     self:UnregisterEvent("UNIT_AURA")
+    self:UnregisterEvent("LOADING_SCREEN_DISABLED")
+    self:UnregisterMessage("Plexus_ExtraUnitsChanged")
     if(self.bucket) then
         self:Debug("unregistering bucket")
         self:UnregisterBucket(self.bucket)
@@ -356,8 +369,16 @@ function PlexusDeDeBuffIcons:Reset()
     self.super.Reset(self)
 end
 
+function PlexusDeDeBuffIcons:ExtraUnitsChanged(message, unitid)
+    for _,v in pairs(PlexusFrame.registeredFrames) do
+        if (v.unit == unitid) and (v.BuffIcons) then
+            for i=1, MAX_BUFFS do v.BuffIcons[i]:Hide() end
+        end
+    end
+end
+
 local function showBuffIcon(v, n, setting, icon, count, unit, instanceid)
-    local dur = C_UnitAuras.GetAuraDuration(unit, instanceid) or 0
+    local dur = C_UnitAuras.GetAuraDuration(unit, instanceid)
     v.DeBuffIcons[n]:Show()
     v.DeBuffIcons[n].icon:SetTexture(icon)
     v.DeBuffIcons[n].auraid = instanceid
@@ -366,7 +387,9 @@ local function showBuffIcon(v, n, setting, icon, count, unit, instanceid)
 
     v.DeBuffIcons[n].stack:SetText(count)
     v.DeBuffIcons[n].stack:Show()
-    v.DeBuffIcons[n].cd:SetCooldownFromDurationObject(dur, true)
+    if dur then
+        v.DeBuffIcons[n].cd:SetCooldownFromDurationObject(dur)
+    end
     local DEBUFF_DISPLAY_COLOR_INFO = {
         [0] = DEBUFF_TYPE_NONE_COLOR,
         [1] = DEBUFF_TYPE_MAGIC_COLOR,
@@ -384,7 +407,9 @@ local function showBuffIcon(v, n, setting, icon, count, unit, instanceid)
         end
     end
     local dispelTypeColor = C_UnitAuras.GetAuraDispelTypeColor(unit, instanceid, curve)
-    v.DeBuffIcons[n]:SetBackdropBorderColor(dispelTypeColor:GetRGBA())
+    if dispelTypeColor then
+        v.DeBuffIcons[n]:SetBackdropBorderColor(dispelTypeColor:GetRGBA())
+    end
     --if not v.DeBuffIcons[n].hooked then
     --    v.DeBuffIcons[n]:HookScript("OnUpdate", function(self, elapsed)
     --        if v.DeBuffIcons[n].auraid then
@@ -427,11 +452,14 @@ local function updateFrame_df(v)
     end
 end
 
+function PlexusDeDeBuffIcons:LOADING_SCREEN_DISABLED()
+    PlexusDeDeBuffIcons:UpdateAllUnitsBuffs()
+end
 
 function PlexusDeDeBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
     if not self.enabled then return end
     if not unitid then return end
-    local guid = UnitGUID(unitid)
+    local guid = not Plexus.IsSpecialUnit[unitid] and UnitGUID(unitid) or unitid
     if not guid then return end
 
     if not UnitAuraInstanceID then

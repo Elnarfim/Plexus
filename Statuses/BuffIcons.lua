@@ -4,7 +4,7 @@ end
 
 local UnitAura, UnitGUID, pairs = _G.UnitAura, _G.UnitGUID, _G.pairs
 
-local MAX_BUFFS = 6
+local MAX_BUFFS = 40
 
 local L = setmetatable(PlexusBuffIconsLocale or {}, {__index = function(t, k) t[k] = k return k end})
 
@@ -102,7 +102,7 @@ local options = {
             type = "range",
             name = L["Icons Size"],
             desc = L["Size for each buff icon"],
-            max = 16,
+            max = 50,
             min = 5,
             step = 1,
             get = function () return PlexusBuffIcons.db.profile.iconsize end,
@@ -251,6 +251,7 @@ function PlexusBuffIcons.InitializeFrame(_, f) --luacheck: ignore 212
             bg:SetFrameLevel(100)
 
             f.BuffIcons[i] = bg
+            f.BuffIcons[i]:Hide()
         end
 
         PlexusBuffIcons.ResetBuffIconSize(f)
@@ -344,22 +345,32 @@ function PlexusBuffIcons:OnInitialize()
 end
 
 function PlexusBuffIcons:OnEnable()
-    if not PlexusBuffIcons.db.profile.enabled then return end
-    self.enabled = true
-    self:RegisterEvent("UNIT_AURA")
-    self:RegisterEvent("LOADING_SCREEN_DISABLED")
-    if(not self.bucket) then
-        self:Debug("registering bucket")
-        self.bucket = self:RegisterBucketMessage("Plexus_UpdateLayoutSize", 1, "UpdateAllUnitsBuffs")
+    if not PlexusBuffIcons.db.profile.enabled then
+        for _,v in pairs(PlexusFrame.registeredFrames) do
+            for i=1, MAX_BUFFS do --luacheck: ignore
+                v.BuffIcons[i]:Hide()
+            end
+        end
+        self.enabled = nil
+        return
+    else
+        self.enabled = true
+        self:RegisterEvent("UNIT_AURA")
+        self:RegisterEvent("LOADING_SCREEN_DISABLED")
+        self:RegisterMessage("Plexus_ExtraUnitsChanged", "ExtraUnitsChanged")
+        if(not self.bucket) then
+            self:Debug("registering bucket")
+            self.bucket = self:RegisterBucketMessage("Plexus_UpdateLayoutSize", 1, "UpdateAllUnitsBuffs")
+        end
+        self:UpdateAllUnitsBuffs()
     end
-
-    self:UpdateAllUnitsBuffs()
 end
 
 function PlexusBuffIcons:OnDisable()
     self.enabled = nil
     self:UnregisterEvent("UNIT_AURA")
     self:UnregisterEvent("LOADING_SCREEN_DISABLED")
+    self:UnregisterMessage("Plexus_ExtraUnitsChanged")
     if(self.bucket) then
         self:Debug("unregistering bucket")
         self:UnregisterBucket(self.bucket)
@@ -376,8 +387,16 @@ function PlexusBuffIcons:Reset()
     self.super.Reset(self)
 end
 
+function PlexusBuffIcons:ExtraUnitsChanged(message, unitid)
+    for _,v in pairs(PlexusFrame.registeredFrames) do
+        if (v.unit == unitid) and (v.BuffIcons) then
+            for i=1, MAX_BUFFS do v.BuffIcons[i]:Hide() end
+        end
+    end
+end
+
 local function showBuffIcon(v, n, setting, icon, count, unit, instanceid)
-    local dur = C_UnitAuras.GetAuraDuration(unit, instanceid) or 0
+    local dur = C_UnitAuras.GetAuraDuration(unit, instanceid)
     v.BuffIcons[n]:Show()
     v.BuffIcons[n].icon:SetTexture(icon)
     v.BuffIcons[n].auraid = instanceid
@@ -385,7 +404,9 @@ local function showBuffIcon(v, n, setting, icon, count, unit, instanceid)
     count = C_UnitAuras.GetAuraApplicationDisplayCount(unit, instanceid , 2 , 100)
     v.BuffIcons[n].stack:SetText(count)
     v.BuffIcons[n].stack:Show()
-    v.BuffIcons[n].cd:SetCooldownFromDurationObject(dur, true)
+    if dur then
+        v.BuffIcons[n].cd:SetCooldownFromDurationObject(dur)
+    end
     --local DEBUFF_DISPLAY_COLOR_INFO = {
     --    [0] = DEBUFF_TYPE_NONE_COLOR,
     --    [1] = DEBUFF_TYPE_MAGIC_COLOR,
@@ -454,7 +475,7 @@ end
 function PlexusBuffIcons:UNIT_AURA(_, unitid, updatedAuras)
     if not self.enabled then return end
     if not unitid then return end
-    local guid = UnitGUID(unitid)
+    local guid = not Plexus.IsSpecialUnit[unitid] and UnitGUID(unitid) or unitid
     if not guid then return end
 
     if not UnitAuraInstanceID then

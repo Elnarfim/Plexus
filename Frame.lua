@@ -218,7 +218,7 @@ end
 local COLOR_WHITE = { r = 1, g = 1, b = 1, a = 1 }
 local COORDS_FULL = { left = 0, right = 1, top = 0, bottom = 1 }
 
-function PlexusFrame.prototype:SetIndicator(id, color, text, value, maxValue, texture, start, duration, count, texCoords)
+function PlexusFrame.prototype:SetIndicator(id, color, text, value, maxValue, texture, start, duration, count, texCoords, expirationTime)
 
     if not color then
         color = COLOR_WHITE
@@ -232,7 +232,7 @@ function PlexusFrame.prototype:SetIndicator(id, color, text, value, maxValue, te
 
     local indicator = self.indicators[id]
     if indicator then
-        indicator:SetStatus(color, text, value, maxValue, texture, texCoords, count, start, duration)
+        indicator:SetStatus(color, text, value, maxValue, texture, texCoords, count, start, duration, expirationTime)
     else
         PlexusFrame:Debug("SetIndicator:", id, "does not exist")
     end
@@ -1527,7 +1527,7 @@ function PlexusFrame:UpdateFrameUnits()
             local old_guid = frame.unitGUID
             local unitid = SecureButton_GetModifiedUnit(frame)
                   unitid = unitid and gsub(unitid, "petpet", "pet") -- http://forums.wowace.com/showpost.php?p=307619&postcount=3174
-            local guid = unitid and UnitGUID(unitid) or nil
+            local guid = unitid and ( (not Plexus.IsSpecialUnit[unitid]) and UnitGUID(unitid) or unitid ) or nil
 
             --Start Priavte Aura
             if Plexus:IsRetailWow() and settings.enablePrivateAura and guid and (old_unit ~= unitid or old_guid ~= guid) and not frame.anchorID then
@@ -1616,7 +1616,11 @@ function PlexusFrame:UpdateFrameUnits()
 
                 if unitid then
                     frame.unit = unitid
-                    frame.unitGUID = guid
+                    if not Plexus.IsSpecialUnit[unitid] then
+                        frame.unitGUID = guid
+                    else
+                        frame.unitGUID = unitid
+                    end
 
                     if guid then
                         self:UpdateIndicators(frame)
@@ -1675,7 +1679,8 @@ function PlexusFrame:UpdateIndicator(frame, indicator)
             status.start,
             status.duration,
             status.count,
-            status.texCoords)
+            status.texCoords,
+            status.expirationTime)
     else
         self:Debug("Clearing indicator", indicator, "for", (UnitName(frame.unit)))
         frame:ClearIndicator(indicator)
@@ -1819,7 +1824,7 @@ end
 
 function PlexusFrame:Plexus_StatusGained(_, guid, status)
     for _, frame in pairs(self.registeredFrames) do
-        if not Plexus:issecretvalue(guid) and frame.unitGUID == guid then
+        if not Plexus:issecretvalue(guid) and not Plexus:issecretvalue(frame.unitGUID) and frame.unitGUID == guid then
             self:UpdateIndicatorsForStatus(frame, status)
         end
     end
@@ -1827,7 +1832,7 @@ end
 
 function PlexusFrame:Plexus_StatusLost(_, guid, status)
     for _, frame in pairs(self.registeredFrames) do
-        if not Plexus:issecretvalue(guid) and frame.unitGUID == guid then
+        if not Plexus:issecretvalue(guid) and not Plexus:issecretvalue(frame.unitGUID) and frame.unitGUID == guid then
             self:UpdateIndicatorsForStatus(frame, status)
         end
     end
